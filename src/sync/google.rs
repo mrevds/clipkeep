@@ -128,14 +128,14 @@ pub fn read_redirect(listener: &TcpListener, expected_state: &str) -> io::Result
 fn result_page(ok: bool) -> String {
     let (badge, mark, title, text) = if ok {
         (
-            "#2f8f5b",
+            "#2FAE6B",
             "&#10003;",
             "You are signed in",
             "You can close this tab and go back to clipkeep.",
         )
     } else {
         (
-            "#B3202D",
+            "#D9534F",
             "!",
             "Sign-in did not work",
             "Close this tab, go back to clipkeep and try again.",

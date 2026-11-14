@@ -17,14 +17,105 @@ pub enum Event {
     HotkeyFailed(String),
 }
 
-pub use imp::run;
+pub use imp::{concealed, run};
 
 #[cfg(target_os = "linux")]
 mod imp {
     use super::*;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
     use x11rb::connection::Connection;
     use x11rb::protocol::xfixes::{ConnectionExt as _, SelectionEventMask};
-    use x11rb::protocol::xproto::ConnectionExt as _;
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, CreateWindowAux, WindowClass};
+    use x11rb::protocol::Event as XEvent;
+    use x11rb::rust_connection::RustConnection;
+
+    /// A private X connection + invisible window to ask the clipboard owner for its TARGETS.
+    struct Probe {
+        conn: RustConnection,
+        win: u32,
+        clipboard: u32,
+        targets: u32,
+        prop: u32,
+        hint: u32,
+    }
+
+    impl Probe {
+        fn new() -> Result<Probe, Box<dyn std::error::Error>> {
+            let (conn, screen) = x11rb::connect(None)?;
+            let root = conn.setup().roots[screen].root;
+            let win = conn.generate_id()?;
+            conn.create_window(
+                0,
+                win,
+                root,
+                0,
+                0,
+                1,
+                1,
+                0,
+                WindowClass::INPUT_ONLY,
+                0,
+                &CreateWindowAux::new(),
+            )?;
+            let atom = |name: &[u8]| -> Result<u32, Box<dyn std::error::Error>> {
+                Ok(conn.intern_atom(false, name)?.reply()?.atom)
+            };
+            let probe = Probe {
+                clipboard: atom(b"CLIPBOARD")?,
+                targets: atom(b"TARGETS")?,
+                prop: atom(b"CLIPKEEP_TARGETS")?,
+                // KeePassXC, KeePass and others offer this type with the value "secret".
+                hint: atom(b"x-kde-passwordManagerHint")?,
+                win,
+                conn,
+            };
+            probe.conn.flush()?;
+            Ok(probe)
+        }
+
+        fn concealed(&self) -> Result<bool, Box<dyn std::error::Error>> {
+            let c = &self.conn;
+            c.convert_selection(self.win, self.clipboard, self.targets, self.prop, 0u32)?;
+            c.flush()?;
+            let deadline = Instant::now() + Duration::from_millis(300);
+            while Instant::now() < deadline {
+                match c.poll_for_event()? {
+                    Some(XEvent::SelectionNotify(e)) if e.requestor == self.win => {
+                        if e.property == 0 {
+                            return Ok(false); // owner refused: no targets
+                        }
+                        let reply = c
+                            .get_property(true, self.win, self.prop, AtomEnum::ATOM, 0, 4096)?
+                            .reply()?;
+                        return Ok(reply
+                            .value32()
+                            .is_some_and(|mut atoms| atoms.any(|a| a == self.hint)));
+                    }
+                    Some(_) => {}
+                    None => std::thread::sleep(Duration::from_millis(3)),
+                }
+            }
+            Ok(false)
+        }
+    }
+
+    /// True when the app that owns the clipboard marked it as a password.
+    pub fn concealed() -> bool {
+        static PROBE: Mutex<Option<Probe>> = Mutex::new(None);
+        let mut probe = PROBE.lock().unwrap_or_else(|e| e.into_inner());
+        if probe.is_none() {
+            *probe = Probe::new().ok();
+        }
+        match probe.as_ref().map(Probe::concealed) {
+            Some(Ok(v)) => v,
+            Some(Err(_)) => {
+                *probe = None; // reconnect next time
+                false
+            }
+            None => false,
+        }
+    }
 
     pub fn run(tx: Sender<Event>, _hotkeys: &[Hotkey]) -> Result<(), String> {
         let go = || -> Result<(), Box<dyn std::error::Error>> {
@@ -68,6 +159,29 @@ mod imp {
     };
 
     static TX: OnceLock<Sender<Event>> = OnceLock::new();
+
+    /// True when the app that copied marked the data as private. Password managers add one of
+    /// these formats (KeePass, Bitwarden, 1Password, Windows' own docs for clipboard history).
+    pub fn concealed() -> bool {
+        use windows_sys::Win32::System::DataExchange::{
+            IsClipboardFormatAvailable, RegisterClipboardFormatW,
+        };
+        [
+            "ExcludeClipboardContentFromMonitorProcessing",
+            "Clipboard Viewer Ignore",
+            // Apps set this to 0 to keep a copy out of clipboard history; nobody sets it to 1.
+            "CanIncludeInClipboardHistory",
+        ]
+        .iter()
+        .any(|name| {
+            let wide: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+            // SAFETY: valid NUL-terminated UTF-16 string; both calls only read.
+            unsafe {
+                let format = RegisterClipboardFormatW(wide.as_ptr());
+                format != 0 && IsClipboardFormatAvailable(format) != 0
+            }
+        })
+    }
 
     unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
         if msg == WM_CLIPBOARDUPDATE {
@@ -249,6 +363,52 @@ mod imp {
                 return -1;
             }
             send_int(pb, sel_registerName(c"changeCount".as_ptr()))
+        }
+    }
+
+    /// True when the app that copied marked the data as a password
+    /// (`org.nspasteboard.ConcealedType`) or as not worth keeping (`TransientType`).
+    pub fn concealed() -> bool {
+        // SAFETY: objc_msgSend called through correctly typed pointers:
+        // `+generalPasteboard` and `-types` return id, `+stringWithUTF8String:` takes a C string,
+        // `-containsObject:` takes id and returns BOOL (one byte on both architectures).
+        unsafe {
+            let send_id: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            let send_str: unsafe extern "C" fn(
+                *mut c_void,
+                *mut c_void,
+                *const c_char,
+            ) -> *mut c_void = std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            let send_has: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> u8 =
+                std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            let pb_class = objc_getClass(c"NSPasteboard".as_ptr());
+            let str_class = objc_getClass(c"NSString".as_ptr());
+            if pb_class.is_null() || str_class.is_null() {
+                return false;
+            }
+            let pb = send_id(pb_class, sel_registerName(c"generalPasteboard".as_ptr()));
+            if pb.is_null() {
+                return false;
+            }
+            let types = send_id(pb, sel_registerName(c"types".as_ptr()));
+            if types.is_null() {
+                return false;
+            }
+            [
+                c"org.nspasteboard.ConcealedType",
+                c"org.nspasteboard.TransientType",
+            ]
+            .iter()
+            .any(|t| {
+                let name = send_str(
+                    str_class,
+                    sel_registerName(c"stringWithUTF8String:".as_ptr()),
+                    t.as_ptr(),
+                );
+                !name.is_null()
+                    && send_has(types, sel_registerName(c"containsObject:".as_ptr()), name) != 0
+            })
         }
     }
 

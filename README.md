@@ -88,6 +88,19 @@ clipkeep sync password                     change the password
 - Text is stored in compressed 64 KB blocks; duplicates are not stored twice.
   Search over 100,000 clips takes about 1 ms.
 
+## Passwords
+
+Passwords and keys are never kept. clipkeep holds them in memory for 60 seconds (shown masked in
+the window), then forgets them and wipes the clipboard if it still holds one. They are never
+written to disk and never synced. A clip counts as a secret when:
+
+- the app that copied it marks it as private, as password managers do (KeePassXC, Bitwarden,
+  1Password and others), or
+- it looks like one: API tokens (GitHub, OpenAI, AWS, Google, Slack...), private keys, JWTs,
+  or a single random-looking word with mixed letters, digits and symbols.
+
+`secret_seconds = 0` in `config.txt` turns this off.
+
 ## Settings
 
 `config.txt` in the data folder (Linux `~/.local/share/clipkeep`, Windows `%APPDATA%\clipkeep`,
@@ -98,6 +111,7 @@ hotkey = Ctrl+Alt+V     # Windows/macOS
 max_entries = 0         # 0 = unlimited
 auto_paste = true       # paste the chosen clip automatically
 image_limit_mb = 1024   # disk space for images; 0 = unlimited
+secret_seconds = 60     # how long passwords stay; 0 = keep them like other clips
 ```
 
 Restart after editing: `clipkeep stop`, then `clipkeep show`.

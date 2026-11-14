@@ -6,6 +6,8 @@ pub enum Kind {
     Text = 0,
     Link = 1,
     Image = 2,
+    /// A password or key held in memory by the daemon; never stored (only shown in search hits).
+    Secret = 3,
 }
 
 impl Kind {

@@ -7,6 +7,7 @@
 //! google_client_id = ...  # for `clipkeep sync setup google` (your own Google Cloud OAuth client)
 //! google_client_secret = ...
 //! image_limit_mb = 1024  # images take at most this much disk (oldest unpinned go first); 0 = no limit
+//! secret_seconds = 60    # passwords and keys: memory only, forgotten after this; 0 = treat as normal clips
 //! ```
 
 use std::fmt;
@@ -100,6 +101,7 @@ pub struct Config {
     pub max_entries: usize,
     pub auto_paste: bool,
     pub image_limit_mb: u64,
+    pub secret_seconds: u64,
     pub google_client_id: Option<String>,
     pub google_client_secret: Option<String>,
 }
@@ -111,6 +113,7 @@ impl Default for Config {
             max_entries: 0,
             auto_paste: true,
             image_limit_mb: 1024,
+            secret_seconds: 60,
             google_client_id: None,
             google_client_secret: None,
         }
@@ -153,6 +156,13 @@ impl Config {
                     Ok(v) => cfg.image_limit_mb = v,
                     Err(_) => errors.push(format!(
                         "config.txt:{}: image_limit_mb must be a number",
+                        n + 1
+                    )),
+                },
+                "secret_seconds" => match value.parse() {
+                    Ok(v) => cfg.secret_seconds = v,
+                    Err(_) => errors.push(format!(
+                        "config.txt:{}: secret_seconds must be a number",
                         n + 1
                     )),
                 },
@@ -227,6 +237,8 @@ mod tests {
         assert_eq!(Config::default().image_limit_mb, 1024);
         assert_eq!(Config::parse("image_limit_mb = 50").0.image_limit_mb, 50);
         assert!(!Config::parse("auto_paste = off").0.auto_paste);
+        assert_eq!(Config::default().secret_seconds, 60);
+        assert_eq!(Config::parse("secret_seconds = 0").0.secret_seconds, 0);
         assert_eq!(Config::parse("auto_paste = maybe").1.len(), 1);
     }
 }

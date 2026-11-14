@@ -412,8 +412,8 @@ impl SyncScreen {
         let code = code.clone();
         ui.add_space(2.0);
         egui::Frame::new()
-            .fill(egui::Color32::from_rgb(0x0C, 0x0A, 0x0D))
-            .stroke(egui::Stroke::new(1.0, theme::BENI))
+            .fill(egui::Color32::from_rgb(0x0A, 0x10, 0x0D))
+            .stroke(egui::Stroke::new(1.0, theme::ACCENT_BRIGHT))
             .corner_radius(10.0)
             .inner_margin(egui::Margin::same(14))
             .show(ui, |ui| {
@@ -568,7 +568,7 @@ fn card(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
 
 fn point(ui: &mut egui::Ui, text: &str) {
     ui.horizontal_top(|ui| {
-        ui.colored_label(theme::BENI_HOVER, "•");
+        ui.colored_label(theme::ACCENT_BRIGHT, "•");
         ui.add(egui::Label::new(text).wrap());
     });
 }

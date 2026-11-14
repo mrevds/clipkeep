@@ -1,19 +1,19 @@
-//! Look of the window: dark "night" background, rice-paper text, beni (crimson) accent: the
-//! palette of the clipkeep logo (the higanbana in a ring).
+//! Look of the window: a deep green-black background, soft white text and the leaf green of the
+//! clipkeep logo (a leaf whose vein is a paper clip) as the accent.
 
 use eframe::egui::{
     self, epaint::Shadow, Color32, CornerRadius, FontId, Margin, Stroke, TextStyle,
 };
 
-pub const BENI: Color32 = Color32::from_rgb(0xB3, 0x20, 0x2D);
-pub const BENI_HOVER: Color32 = Color32::from_rgb(0xC9, 0x2B, 0x39);
-pub const BENI_SOFT: Color32 = Color32::from_rgb(0x4A, 0x19, 0x1F);
-pub const NIGHT: Color32 = Color32::from_rgb(0x12, 0x10, 0x13);
-pub const RAISED: Color32 = Color32::from_rgb(0x1E, 0x1A, 0x1C);
-pub const RAISED_HI: Color32 = Color32::from_rgb(0x2A, 0x24, 0x26);
-pub const BORDER: Color32 = Color32::from_rgb(0x37, 0x30, 0x32);
-pub const PAPER: Color32 = Color32::from_rgb(0xF4, 0xF1, 0xEC);
-pub const MUTED: Color32 = Color32::from_rgb(0x9A, 0x91, 0x8B);
+pub const ACCENT: Color32 = Color32::from_rgb(0x1F, 0x8F, 0x55);
+pub const ACCENT_BRIGHT: Color32 = Color32::from_rgb(0x3D, 0xBE, 0x74);
+pub const ACCENT_SOFT: Color32 = Color32::from_rgb(0x17, 0x40, 0x2C);
+pub const NIGHT: Color32 = Color32::from_rgb(0x0F, 0x16, 0x13);
+pub const RAISED: Color32 = Color32::from_rgb(0x18, 0x21, 0x1D);
+pub const RAISED_HI: Color32 = Color32::from_rgb(0x22, 0x30, 0x2A);
+pub const BORDER: Color32 = Color32::from_rgb(0x2B, 0x3A, 0x33);
+pub const PAPER: Color32 = Color32::from_rgb(0xF1, 0xF7, 0xF2);
+pub const MUTED: Color32 = Color32::from_rgb(0x93, 0xA6, 0x9B);
 pub const ERR: Color32 = Color32::from_rgb(0xF0, 0x6B, 0x74);
 
 const LOGO_PNG: &[u8] = include_bytes!("../../assets/logo-256.png");
@@ -44,10 +44,10 @@ pub fn apply(ctx: &egui::Context) {
         v.override_text_color = Some(PAPER);
         v.panel_fill = NIGHT;
         v.window_fill = NIGHT;
-        v.extreme_bg_color = Color32::from_rgb(0x0C, 0x0A, 0x0D); // text fields
+        v.extreme_bg_color = Color32::from_rgb(0x0A, 0x10, 0x0D); // text fields
         v.faint_bg_color = RAISED;
-        v.hyperlink_color = Color32::from_rgb(0xE0, 0x6A, 0x74);
-        v.selection.bg_fill = BENI_SOFT;
+        v.hyperlink_color = Color32::from_rgb(0x6F, 0xD6, 0x9A);
+        v.selection.bg_fill = ACCENT_SOFT;
         v.selection.stroke = Stroke::new(1.0, PAPER);
         v.window_shadow = Shadow::NONE;
         v.popup_shadow = Shadow::NONE;
@@ -65,11 +65,11 @@ pub fn apply(ctx: &egui::Context) {
         v.widgets.inactive.fg_stroke = Stroke::new(1.0, PAPER);
         v.widgets.hovered.bg_fill = RAISED_HI;
         v.widgets.hovered.weak_bg_fill = RAISED_HI;
-        v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x5A, 0x4E, 0x50));
+        v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x46, 0x5E, 0x52));
         v.widgets.hovered.fg_stroke = Stroke::new(1.0, PAPER);
-        v.widgets.active.bg_fill = BENI_SOFT;
-        v.widgets.active.weak_bg_fill = BENI_SOFT;
-        v.widgets.active.bg_stroke = Stroke::new(1.0, BENI);
+        v.widgets.active.bg_fill = ACCENT_SOFT;
+        v.widgets.active.weak_bg_fill = ACCENT_SOFT;
+        v.widgets.active.bg_stroke = Stroke::new(1.0, ACCENT);
         v.widgets.active.fg_stroke = Stroke::new(1.0, PAPER);
 
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
@@ -102,10 +102,10 @@ pub fn window_frame() -> egui::Frame {
         .inner_margin(Margin::same(14))
 }
 
-/// The main call-to-action button: filled crimson.
+/// The main call-to-action button: filled leaf green.
 pub fn primary(text: &str) -> egui::Button<'static> {
     egui::Button::new(egui::RichText::new(text).color(PAPER).strong())
-        .fill(BENI)
+        .fill(ACCENT)
         .stroke(Stroke::NONE)
         .min_size(egui::vec2(0.0, 36.0))
 }

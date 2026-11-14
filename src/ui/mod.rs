@@ -87,6 +87,7 @@ struct Popup {
     paste_after_close: Arc<AtomicBool>,
     ctx: egui::Context,
     logo: Option<egui::TextureHandle>,
+    secrets_refreshed: std::time::Instant,
     thumbs: HashMap<u32, Option<egui::TextureHandle>>,
     thumbs_asked: HashSet<u32>,
     thumb_jobs: Sender<u32>,
@@ -135,6 +136,7 @@ impl Popup {
             edit: None,
             paste_after_close,
             ctx: ctx_for_self.clone(),
+            secrets_refreshed: std::time::Instant::now(),
             logo: theme::logo_image()
                 .map(|img| ctx_for_self.load_texture("logo", img, egui::TextureOptions::LINEAR)),
             thumbs: HashMap::new(),
@@ -493,6 +495,14 @@ impl eframe::App for Popup {
         self.debug_screenshot(&ctx);
         self.take_results();
         self.take_thumbs(&ctx);
+        // Secrets show a countdown and disappear on their own: refresh while one is listed.
+        if self.hits.iter().any(|h| h.kind == Kind::Secret as u8) {
+            if self.secrets_refreshed.elapsed() >= std::time::Duration::from_secs(1) {
+                self.secrets_refreshed = std::time::Instant::now();
+                self.refresh();
+            }
+            ctx.request_repaint_after(std::time::Duration::from_secs(1));
+        }
 
         // Ask for focus once (Windows/macOS start us from the daemon), then close
         // when the user clicks somewhere else, like Win+V does.
@@ -586,7 +596,16 @@ impl eframe::App for Popup {
                             self.image_row(ui, &h, selected)
                         } else {
                         let mut label = if row < 9 { format!("{}  ", row + 1) } else { "    ".to_owned() };
+                        let secret = h.kind == Kind::Secret as u8;
+                        if secret {
+                            label.push_str("🔒 ");
+                        }
                         label.push_str(&h.preview);
+                        let label = if secret {
+                            egui::RichText::new(label).color(theme::MUTED).italics()
+                        } else {
+                            egui::RichText::new(label)
+                        };
                         let mut tags = String::new();
                         if let Some(g) = self.group_name(h.group) {
                             tags.push_str(&format!("#{g} "));
