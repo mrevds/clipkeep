@@ -1,0 +1,58 @@
+[package]
+name = "clipkeep"
+version = "0.1.0"
+edition = "2021"
+description = "Fast clipboard history manager (Win+V style) for Linux, Windows and macOS"
+license = "MIT"
+
+[features]
+default = ["google"]
+# Google Drive sync (needs a TLS stack, which needs a C compiler when cross-compiling).
+google = ["dep:ureq", "dep:sha2"]
+
+[lib]
+name = "clipkeep"
+path = "src/lib.rs"
+
+[[bin]]
+name = "clipkeep"
+path = "src/main.rs"
+
+[[bin]]
+name = "clipkeepw"
+path = "src/bin/clipkeepw.rs"
+
+[dependencies]
+arboard = { version = "3.7", default-features = false, features = ["image-data"] }
+eframe = { version = "0.37", default-features = false, features = ["glow", "wayland", "x11", "default_fonts"] }
+egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+miniz_oxide = "0.8"
+chacha20poly1305 = "0.10"
+png = "0.17"
+argon2 = "0.5"
+ureq = { version = "2", features = ["json"], optional = true }
+sha2 = { version = "0.10", optional = true }
+rpassword = "7"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13", features = ["xfixes"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
