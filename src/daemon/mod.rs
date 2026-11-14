@@ -3,10 +3,12 @@
 pub mod ipc;
 pub mod paste;
 pub mod platform;
+mod secrets;
 mod sync_loop;
 
 use self::ipc::Command;
 use self::platform::Event;
+use self::secrets::Secrets;
 use crate::config::Config;
 use crate::paths;
 use crate::store::media::{self, Media};
@@ -21,15 +23,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 /// Changes are written to disk at most this long after they happen.
 const SAVE_DELAY: Duration = Duration::from_millis(500);
 const PREVIEW_CHARS: usize = 120;
-/// Ids of in-memory secrets: far above anything the store hands out.
-const SECRET_ID_BASE: u32 = 0xF000_0000;
-
-/// A password or key: kept in memory only (never on disk, never synced) and forgotten at `until`.
-struct Secret {
-    id: u32,
-    text: String,
-    until: Instant,
-}
 
 struct State {
     store: Store,
@@ -45,10 +38,7 @@ struct State {
     last_image: Option<u64>,
     image_limit: u64,
     sync: Option<sync_loop::Handle>,
-    secrets: Vec<Secret>,
-    next_secret: u32,
-    /// Zero: secret detection is off and passwords are stored like any other clip.
-    secret_ttl: Duration,
+    secrets: Secrets,
 }
 
 fn now() -> u32 {
@@ -76,7 +66,7 @@ impl State {
     fn capture(&mut self, concealed: bool) {
         match self.clipboard.get_text() {
             Ok(text) if !text.trim().is_empty() => {
-                if !self.secret_ttl.is_zero() && (concealed || crate::secret::looks_secret(&text)) {
+                if self.secrets.enabled() && (concealed || crate::secret::looks_secret(&text)) {
                     self.capture_secret(text);
                 } else {
                     self.capture_text(text);
@@ -91,65 +81,18 @@ impl State {
             return;
         }
         self.last_image = None;
-        let until = Instant::now() + self.secret_ttl;
-        if let Some(i) = self.secrets.iter().position(|s| s.text == text) {
-            let mut s = self.secrets.remove(i);
-            s.until = until;
-            self.secrets.push(s);
-        } else {
-            self.secrets.push(Secret {
-                id: SECRET_ID_BASE + self.next_secret,
-                text: text.clone(),
-                until,
-            });
-            self.next_secret = self.next_secret.wrapping_add(1) % 0x0FFF_FFFF;
-        }
+        self.secrets.add(text.clone(), Instant::now());
         self.last_seen = Some(text);
     }
 
     /// Forgets secrets whose time is up, and wipes the clipboard if it still holds one.
     fn expire_secrets(&mut self) {
-        let now = Instant::now();
-        if self.secrets.iter().all(|s| s.until > now) {
-            return;
-        }
-        let (expired, kept): (Vec<Secret>, Vec<Secret>) = std::mem::take(&mut self.secrets)
-            .into_iter()
-            .partition(|s| s.until <= now);
-        self.secrets = kept;
-        for s in expired {
-            if self.clipboard.get_text().ok().as_deref() == Some(s.text.as_str()) {
+        for text in self.secrets.expire(Instant::now()) {
+            if self.clipboard.get_text().ok().as_deref() == Some(text.as_str()) {
                 let _ = self.clipboard.clear();
                 self.last_seen = None;
             }
         }
-    }
-
-    fn secret(&self, id: u32) -> Option<&Secret> {
-        self.secrets.iter().find(|s| s.id == id)
-    }
-
-    /// Search hits for the secrets: newest first, masked, only in the All view without a query
-    /// (their text is never searched).
-    fn secret_hits(&self, view: crate::store::View, query: &str) -> Vec<crate::store::Hit> {
-        if view != crate::store::View::All || !query.trim().is_empty() {
-            return Vec::new();
-        }
-        let now = Instant::now();
-        self.secrets
-            .iter()
-            .rev()
-            .map(|s| crate::store::Hit {
-                id: s.id,
-                pinned: false,
-                group: 0,
-                kind: text::Kind::Secret as u8,
-                preview: format!(
-                    "Password hidden · forgotten in {} s",
-                    s.until.saturating_duration_since(now).as_secs() + 1
-                ),
-            })
-            .collect()
     }
 
     /// Tells the sync thread about a local change (no-op when sync is off).
@@ -260,25 +203,25 @@ impl State {
         match cmd {
             Command::Ping | Command::Quit => {}
             Command::Show => self.toggle_popup(),
-            Command::Copy(id) if *id >= SECRET_ID_BASE => {
+            Command::Copy(id) if Secrets::owns(*id) => {
                 let text = self
-                    .secret(*id)
+                    .secrets
+                    .get(*id)
                     .ok_or("this secret was already forgotten")?
-                    .text
-                    .clone();
+                    .to_owned();
                 self.clipboard
                     .set_text(text.clone())
                     .map_err(|e| e.to_string())?;
                 self.last_seen = Some(text);
                 self.last_image = None;
             }
-            Command::Pin(id) | Command::SetGroup(id, _) if *id >= SECRET_ID_BASE => {
+            Command::Pin(id) | Command::SetGroup(id, _) if Secrets::owns(*id) => {
                 return Err("passwords are not kept; save it in a password manager".into());
             }
-            Command::Delete(id) if *id >= SECRET_ID_BASE => {
-                self.secrets.retain(|s| s.id != *id);
+            Command::Delete(id) if Secrets::owns(*id) => {
+                self.secrets.remove(*id);
             }
-            Command::Thumb(id) if *id >= SECRET_ID_BASE => return Err("not an image".into()),
+            Command::Thumb(id) if Secrets::owns(*id) => return Err("not an image".into()),
             Command::Copy(id) => {
                 let text = self.store.text(*id).map_err(err)?.ok_or("no such clip")?;
                 if let Some(r) = text::parse_image_marker(&text) {
@@ -400,7 +343,7 @@ impl State {
             }
             Command::Search { view, limit, query } => {
                 let limit = (*limit).min(10_000);
-                let secrets = self.secret_hits(*view, query);
+                let secrets = self.secrets.hits(*view, query, Instant::now());
                 for h in secrets.iter() {
                     out.push(ipc::encode_hit(h));
                 }
@@ -477,9 +420,7 @@ pub fn run() -> Result<(), String> {
         last_image: None,
         image_limit: config.image_limit_mb << 20,
         sync: None,
-        secrets: Vec::new(),
-        next_secret: 0,
-        secret_ttl: Duration::from_secs(config.secret_seconds),
+        secrets: Secrets::new(Duration::from_secs(config.secret_seconds)),
     }));
     state.lock().unwrap().trim_images();
     match crate::sync::settings::Settings::load() {

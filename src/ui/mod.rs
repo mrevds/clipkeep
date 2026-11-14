@@ -57,8 +57,13 @@ pub fn run(query: String) -> Result<(), String> {
     result
 }
 
+mod debug;
+mod input;
+mod list;
 mod sync_screen;
 mod theme;
+
+use self::input::Action;
 #[cfg(target_os = "linux")]
 mod toggle;
 mod workers;
@@ -96,16 +101,12 @@ struct Popup {
     screenshot_to: Option<std::path::PathBuf>,
 }
 
-enum Action {
-    Copy(u32),
-    Pin(u32),
-    Delete(u32),
-    EditGroup(u32),
-    Close,
-}
-
 impl Popup {
-    fn new(ctx: egui::Context, query: String, paste_after_close: Arc<AtomicBool>) -> Self {
+    pub(super) fn new(
+        ctx: egui::Context,
+        query: String,
+        paste_after_close: Arc<AtomicBool>,
+    ) -> Self {
         let (jobs, rx) = mpsc::channel();
         let results: Results = Arc::default();
         let out = Arc::clone(&results);
@@ -155,7 +156,7 @@ impl Popup {
         p
     }
 
-    fn tabs(&self) -> Vec<(String, View)> {
+    pub(super) fn tabs(&self) -> Vec<(String, View)> {
         let mut t = vec![
             ("All".to_owned(), View::All),
             ("📌 Pinned".to_owned(), View::Pinned),
@@ -170,23 +171,23 @@ impl Popup {
         t
     }
 
-    fn view(&self) -> View {
+    pub(super) fn view(&self) -> View {
         self.tabs().get(self.tab).map(|t| t.1).unwrap_or(View::All)
     }
 
-    fn group_name(&self, id: u16) -> Option<&str> {
+    pub(super) fn group_name(&self, id: u16) -> Option<&str> {
         self.groups
             .iter()
             .find(|g| g.id == id)
             .map(|g| g.name.as_str())
     }
 
-    fn refresh(&mut self) {
+    pub(super) fn refresh(&mut self) {
         self.gen += 1;
         let _ = self.jobs.send((self.gen, self.view(), self.query.clone()));
     }
 
-    fn reload_groups(&mut self) {
+    pub(super) fn reload_groups(&mut self) {
         match ipc::request(&Command::Groups) {
             Ok(lines) => self.groups = lines.iter().filter_map(|l| ipc::parse_group(l)).collect(),
             Err(e) => self.error = Some(format!("daemon: {e}")),
@@ -196,7 +197,7 @@ impl Popup {
         }
     }
 
-    fn send(&mut self, cmd: Command) -> bool {
+    pub(super) fn send(&mut self, cmd: Command) -> bool {
         match ipc::request(&cmd) {
             Ok(_) => true,
             Err(e) => {
@@ -206,7 +207,7 @@ impl Popup {
         }
     }
 
-    fn take_results(&mut self) {
+    pub(super) fn take_results(&mut self) {
         let Some((gen, result)) = self.results.lock().unwrap().take() else {
             return;
         };
@@ -226,7 +227,7 @@ impl Popup {
         }
     }
 
-    fn take_thumbs(&mut self, ctx: &egui::Context) {
+    pub(super) fn take_thumbs(&mut self, ctx: &egui::Context) {
         while let Ok((id, image)) = self.thumb_results.try_recv() {
             let tex = image.map(|img| {
                 ctx.load_texture(format!("thumb{id}"), img, egui::TextureOptions::LINEAR)
@@ -235,69 +236,7 @@ impl Popup {
         }
     }
 
-    /// One image row: thumbnail on the left, description next to it.
-    fn image_row(&mut self, ui: &mut egui::Ui, h: &Hit, selected: bool) -> egui::Response {
-        const ROW_H: f32 = 56.0;
-        if self.thumbs_asked.insert(h.id) {
-            let _ = self.thumb_jobs.send(h.id);
-        }
-        let (rect, resp) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width(), ROW_H),
-            egui::Sense::click(),
-        );
-        let visuals = ui.visuals();
-        if selected {
-            ui.painter()
-                .rect_filled(rect, 4.0, visuals.selection.bg_fill);
-        } else if resp.hovered() {
-            ui.painter()
-                .rect_filled(rect, 4.0, visuals.widgets.hovered.weak_bg_fill);
-        }
-        let mut text_x = rect.left() + 8.0;
-        if let Some(Some(tex)) = self.thumbs.get(&h.id) {
-            let size = tex.size_vec2();
-            let k = ((ROW_H - 8.0) / size.y).min(160.0 / size.x).min(1.0);
-            let r = egui::Rect::from_min_size(
-                egui::pos2(rect.left() + 8.0, rect.center().y - size.y * k / 2.0),
-                size * k,
-            );
-            ui.painter().image(
-                tex.id(),
-                r,
-                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                egui::Color32::WHITE,
-            );
-        }
-        text_x += self
-            .thumbs
-            .get(&h.id)
-            .and_then(|t| t.as_ref())
-            .map_or(0.0, |t| {
-                (t.size_vec2().x
-                    * ((ROW_H - 8.0) / t.size_vec2().y)
-                        .min(160.0 / t.size_vec2().x)
-                        .min(1.0))
-                .max(0.0)
-            })
-            + 14.0;
-        let mut label = h.preview.clone();
-        if h.pinned {
-            label.push_str("  📌");
-        }
-        if let Some(g) = self.group_name(h.group) {
-            label.push_str(&format!("  #{g}"));
-        }
-        ui.painter().text(
-            egui::pos2(text_x, rect.center().y),
-            egui::Align2::LEFT_CENTER,
-            label,
-            egui::FontId::proportional(14.0),
-            ui.visuals().text_color(),
-        );
-        resp
-    }
-
-    fn open_sync(&mut self, ctx: &egui::Context) {
+    pub(super) fn open_sync(&mut self, ctx: &egui::Context) {
         self.sync = Some(sync_screen::SyncScreen::open(ctx.clone()));
         // Browser and password prompts need a normal window: not on top, and it must survive losing focus.
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
@@ -305,7 +244,7 @@ impl Popup {
         ));
     }
 
-    fn close_sync(&mut self, ctx: &egui::Context) {
+    pub(super) fn close_sync(&mut self, ctx: &egui::Context) {
         self.sync = None;
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
             egui::WindowLevel::AlwaysOnTop,
@@ -313,180 +252,12 @@ impl Popup {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
 
-    fn switch_tab(&mut self, delta: isize) {
+    pub(super) fn switch_tab(&mut self, delta: isize) {
         let n = self.tabs().len() as isize;
         self.tab = (self.tab as isize + delta).rem_euclid(n) as usize;
         self.selected = 0;
         self.refresh();
     }
-
-    fn keyboard(&mut self, ui: &mut egui::Ui) -> Option<Action> {
-        let n = self.hits.len();
-        let current = self.hits.get(self.selected).map(|h| h.id);
-        let mut action = None;
-        let mut tab_delta = 0;
-        ui.input_mut(|i| {
-            if i.consume_key(Modifiers::NONE, Key::Escape) {
-                action = Some(Action::Close);
-            }
-            let mut sel = None;
-            if i.consume_key(Modifiers::NONE, Key::ArrowDown) && n > 0 {
-                sel = Some((self.selected + 1).min(n - 1));
-            }
-            if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
-                sel = Some(self.selected.saturating_sub(1));
-            }
-            if i.consume_key(Modifiers::NONE, Key::PageDown) && n > 0 {
-                sel = Some((self.selected + 8).min(n - 1));
-            }
-            if i.consume_key(Modifiers::NONE, Key::PageUp) {
-                sel = Some(self.selected.saturating_sub(8));
-            }
-            if let Some(sel) = sel {
-                self.selected = sel;
-                self.scroll_to_selected = true;
-            }
-            if i.consume_key(Modifiers::SHIFT, Key::Tab) {
-                tab_delta = -1;
-            }
-            if i.consume_key(Modifiers::NONE, Key::Tab) {
-                tab_delta = 1;
-            }
-            if i.consume_key(Modifiers::NONE, Key::Enter) {
-                action = current.map(Action::Copy);
-            }
-            if i.consume_key(Modifiers::COMMAND, Key::P) {
-                action = current.map(Action::Pin);
-            }
-            if i.consume_key(Modifiers::COMMAND, Key::G) {
-                action = current.map(Action::EditGroup);
-            }
-            if i.consume_key(Modifiers::SHIFT, Key::Delete) {
-                action = current.map(Action::Delete);
-            }
-            const DIGITS: [Key; 9] = [
-                Key::Num1,
-                Key::Num2,
-                Key::Num3,
-                Key::Num4,
-                Key::Num5,
-                Key::Num6,
-                Key::Num7,
-                Key::Num8,
-                Key::Num9,
-            ];
-            for (k, key) in DIGITS.iter().enumerate() {
-                if i.consume_key(Modifiers::COMMAND, *key) {
-                    if let Some(h) = self.hits.get(k) {
-                        action = Some(Action::Copy(h.id));
-                    }
-                }
-            }
-        });
-        if tab_delta != 0 {
-            self.switch_tab(tab_delta);
-        }
-        action
-    }
-
-    fn apply(&mut self, ctx: &egui::Context, action: Action) {
-        match action {
-            Action::Close => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-            Action::Copy(id) => {
-                if self.send(Command::Copy(id)) {
-                    self.paste_after_close.store(true, Ordering::Relaxed);
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            }
-            Action::Pin(id) => {
-                if self.send(Command::Pin(id)) {
-                    self.refresh();
-                }
-            }
-            Action::Delete(id) => {
-                if self.send(Command::Delete(id)) {
-                    self.refresh();
-                }
-            }
-            Action::EditGroup(id) => {
-                let current = self
-                    .hits
-                    .iter()
-                    .find(|h| h.id == id)
-                    .map(|h| h.group)
-                    .unwrap_or(0);
-                let name = self.group_name(current).unwrap_or("").to_owned();
-                self.edit = Some(GroupEdit { id, name });
-            }
-        }
-    }
-
-    /// Bottom bar while choosing a group: type a name (new or existing) or click one.
-    fn group_editor(&mut self, ui: &mut egui::Ui) {
-        let Some(edit) = &mut self.edit else { return };
-        let (enter, esc) = ui.input_mut(|i| {
-            (
-                i.consume_key(Modifiers::NONE, Key::Enter),
-                i.consume_key(Modifiers::NONE, Key::Escape),
-            )
-        });
-        let mut chosen: Option<String> = enter.then(|| edit.name.clone());
-        ui.horizontal(|ui| {
-            ui.label("Group:");
-            let field = ui.add(
-                egui::TextEdit::singleline(&mut edit.name)
-                    .hint_text("name, Enter to save, empty = no group")
-                    .desired_width(260.0),
-            );
-            field.request_focus();
-            for g in &self.groups {
-                if ui.small_button(&g.name).clicked() {
-                    chosen = Some(g.name.clone());
-                }
-            }
-        });
-        if esc {
-            self.edit = None;
-        } else if let Some(name) = chosen {
-            let id = edit.id;
-            self.edit = None;
-            if self.send(Command::SetGroup(id, name)) {
-                self.reload_groups();
-                self.refresh();
-            }
-        }
-    }
-
-    fn debug_screenshot(&mut self, ctx: &egui::Context) {
-        let Some(path) = self.screenshot_to.clone() else {
-            return;
-        };
-        ctx.request_repaint();
-        if !self.loaded {
-            return;
-        }
-        self.frames += 1;
-        if self.frames == 3 {
-            let c = ctx.clone();
-            let callback = egui::ScreenshotCallback::new(move |img| {
-                if let Err(e) = save_ppm(&path, &img) {
-                    eprintln!("clipkeep: screenshot failed: {e}");
-                }
-                c.send_viewport_cmd(egui::ViewportCommand::Close);
-                c.request_repaint();
-            });
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(callback));
-        }
-    }
-}
-
-fn save_ppm(path: &std::path::Path, img: &egui::ColorImage) -> std::io::Result<()> {
-    let [w, h] = img.size;
-    let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
-    for px in &img.pixels {
-        out.extend_from_slice(&[px.r(), px.g(), px.b()]);
-    }
-    std::fs::write(path, out)
 }
 
 impl eframe::App for Popup {
@@ -574,67 +345,9 @@ impl eframe::App for Popup {
             });
             ui.add_space(2.0);
 
-            let footer_h = 26.0;
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .max_height(ui.available_height() - footer_h)
-                .show(ui, |ui| {
-                    if self.loaded && self.hits.is_empty() {
-                        ui.add_space(30.0);
-                        ui.vertical_centered(|ui| {
-                            ui.label(theme::muted(if self.query.is_empty() && self.tab == 0 {
-                                "History is empty. Copy something and it shows up here."
-                            } else {
-                                "Nothing found."
-                            }));
-                        });
-                    }
-                    for row in 0..self.hits.len() {
-                        let h = self.hits[row].clone();
-                        let selected = row == self.selected;
-                        let resp = if h.kind == Kind::Image as u8 {
-                            self.image_row(ui, &h, selected)
-                        } else {
-                        let mut label = if row < 9 { format!("{}  ", row + 1) } else { "    ".to_owned() };
-                        let secret = h.kind == Kind::Secret as u8;
-                        if secret {
-                            label.push_str("🔒 ");
-                        }
-                        label.push_str(&h.preview);
-                        let label = if secret {
-                            egui::RichText::new(label).color(theme::MUTED).italics()
-                        } else {
-                            egui::RichText::new(label)
-                        };
-                        let mut tags = String::new();
-                        if let Some(g) = self.group_name(h.group) {
-                            tags.push_str(&format!("#{g} "));
-                        }
-                        if h.kind == Kind::Link as u8 {
-                            tags.push('🔗');
-                        }
-                        if h.pinned {
-                            tags.push('📌');
-                        }
-                        ui.add(
-                            egui::Button::selectable(selected, label)
-                                .right_text(egui::RichText::new(tags).weak())
-                                .truncate()
-                                .min_size(egui::vec2(ui.available_width(), 26.0)),
-                        )
-                        };
-                        if selected && self.scroll_to_selected {
-                            resp.scroll_to_me(None);
-                        }
-                        if resp.clicked() {
-                            action = Some(Action::Copy(h.id));
-                        }
-                        if resp.secondary_clicked() {
-                            action = Some(Action::Pin(h.id));
-                        }
-                    }
-                });
-            self.scroll_to_selected = false;
+            if let Some(a) = self.clip_list(ui) {
+                action = Some(a);
+            }
 
             ui.separator();
             if self.edit.is_some() {

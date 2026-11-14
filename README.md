@@ -10,6 +10,12 @@ A fast clipboard history manager (like Win+V) for Linux, Windows and macOS.
 One native Rust binary: unlimited history stored compressed and encrypted, search in milliseconds,
 images, pins and groups, and optional end-to-end encrypted sync between your devices.
 
+<p align="center">
+  <img src="assets/screenshots/main.png" width="420" alt="clipkeep window: history with a pinned clip, an image, a group and a hidden password">
+  &nbsp;
+  <img src="assets/screenshots/sync.png" width="420" alt="clipkeep sync setup: choose a sync password">
+</p>
+
 ## Install
 
 No Rust needed: the script downloads a ready-made build, installs it into your home folder
