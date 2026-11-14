@@ -1,4 +1,8 @@
-<p align="center"><img src="assets/logo-128.png" width="96" alt="clipkeep logo"></p>
+<p align="center">
+  <img src="assets/logo-128.png" width="96" alt="clipkeep logo">
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://github.com/mrevds"><img src="assets/mrevds-128.png" width="96" alt="mrevds"></a>
+</p>
 
 # clipkeep
 
