@@ -2,14 +2,14 @@
 # puts it into %LOCALAPPDATA%\Programs\clipkeep, adds that folder to your PATH and runs
 # `clipkeep setup` (autostart + hotkey). No administrator rights needed.
 #
-#   irm https://raw.githubusercontent.com/OWNER/clipkeep/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/mrevds/clipkeep/main/install.ps1 | iex
 #
 # Options (environment): $env:CLIPKEEP_NO_SETUP = 1    $env:CLIPKEEP_REPO = 'owner/name'
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # the progress bar makes Invoke-WebRequest very slow on PowerShell 5
 
-$repo = if ($env:CLIPKEEP_REPO) { $env:CLIPKEEP_REPO } else { 'OWNER/clipkeep' }
+$repo = if ($env:CLIPKEEP_REPO) { $env:CLIPKEEP_REPO } else { 'mrevds/clipkeep' }
 $base = if ($env:CLIPKEEP_BASE_URL) { $env:CLIPKEEP_BASE_URL } else { "https://github.com/$repo/releases/latest/download" }
 $name = 'clipkeep-windows-x86_64'
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\clipkeep'

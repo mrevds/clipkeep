@@ -2,12 +2,12 @@
 # clipkeep installer for Linux and macOS. Downloads the latest ready-made release (no Rust needed),
 # puts it into ~/.local/bin and runs `clipkeep setup` (autostart, hotkey, icon).
 #
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/clipkeep/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/mrevds/clipkeep/main/install.sh | sh
 #
 # Options (environment): CLIPKEEP_BIN_DIR=/other/dir   CLIPKEEP_NO_SETUP=1   CLIPKEEP_REPO=owner/name
 set -eu
 
-REPO="${CLIPKEEP_REPO:-OWNER/clipkeep}"
+REPO="${CLIPKEEP_REPO:-mrevds/clipkeep}"
 BIN_DIR="${CLIPKEEP_BIN_DIR:-$HOME/.local/bin}"
 BASE_URL="${CLIPKEEP_BASE_URL:-https://github.com/$REPO/releases/latest/download}"
 

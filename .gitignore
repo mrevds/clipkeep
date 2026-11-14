@@ -2,3 +2,10 @@
 *.ppm
 *.log
 .DS_Store
+
+# Never commit local secrets or user data
+config.txt
+sync.json
+key.bin
+*.env
+.env*

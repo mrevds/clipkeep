@@ -1,286 +1,126 @@
+<p align="center"><img src="assets/logo-128.png" width="96" alt="clipkeep logo"></p>
+
 # clipkeep
 
-Быстрый менеджер буфера обмена (аналог Win+V) для Linux, Windows и macOS.
-Язык: **Rust**. Один нативный бинарник, без рантайма, история хранится сжатой, поиск занимает миллисекунды.
+A fast clipboard history manager (like Win+V) for Linux, Windows and macOS.
+One native Rust binary: unlimited history stored compressed and encrypted, search in milliseconds,
+images, pins and groups, and optional end-to-end encrypted sync between your devices.
 
-## Установка
+## Install
 
-Rust не нужен: скрипт скачивает готовую сборку из GitHub Releases, кладёт её в домашнюю папку
-(права администратора не нужны) и запускает `clipkeep setup`: автозапуск, горячая клавиша, иконка.
+No Rust needed: the script downloads a ready-made build, installs it into your home folder
+(no admin rights) and runs `clipkeep setup` (autostart, hotkey, app icon).
 
-**Linux и macOS** (терминал):
+**Linux / macOS**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/clipkeep/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mrevds/clipkeep/main/install.sh | sh
 ```
 
-**Windows** (PowerShell):
+**Windows** (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/OWNER/clipkeep/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/mrevds/clipkeep/main/install.ps1 | iex
 ```
 
-| ОС | Куда ставится |
+Run the same command again to update. `clipkeep uninstall` removes autostart and the hotkey;
+your history stays on disk.
+
+Ready-made builds: Linux x86_64 (glibc 2.35+), Windows x86_64, macOS Apple Silicon and Intel.
+The binaries are not code-signed yet: if you download an archive by hand in a browser, Windows
+SmartScreen asks for confirmation and macOS needs `xattr -d com.apple.quarantine clipkeep clipkeepw`.
+
+## Use
+
+| OS | Hotkey |
 |---|---|
-| Linux, macOS | `~/.local/bin/clipkeep` (если папки нет в `PATH`, скрипт подскажет строку для `~/.profile`) |
-| Windows | `%LOCALAPPDATA%\Programs\clipkeep`, папка добавляется в `PATH` пользователя |
+| Linux (GNOME) | `Super+V` (other desktops: bind a key to `clipkeep show`) |
+| Windows | `Win+Alt+V`, or `Ctrl+Alt+V` if taken |
+| macOS | `Ctrl+Cmd+V`, or `Ctrl+Option+V` if taken |
 
-Обновление: та же команда ещё раз (старый демон останавливается, история остаётся).
-Удаление: `clipkeep uninstall`, затем удалить сами файлы программы.
+In the window:
 
-Готовые сборки: Linux x86_64 (glibc 2.35+, Ubuntu 22.04 и новее), Windows x86_64,
-macOS Apple Silicon и Intel. Для остальных — сборка из исходников.
-На Linux горячую клавишу `setup` ставит в GNOME; в другой оболочке он подскажет команду
-(`clipkeep show`), на которую клавишу нужно повесить самому.
+- type to search (all words, case-insensitive, any language)
+- `↑` `↓` select, `Enter` copy and paste, `Ctrl+1…9` pick directly
+- `Tab` switch tabs: All, Pinned, Links, Images and your groups
+- `Ctrl+P` or right click: pin · `Ctrl+G`: put in a group · `Shift+Del`: delete
+- `Esc` or a click outside closes the window
 
-Программа пока без цифровой подписи. Скрипты качают файлы сами, поэтому предупреждений обычно нет,
-но если скачать архив вручную через браузер:
-- Windows: SmartScreen → «Подробнее» → «Выполнить в любом случае»;
-- macOS: Gatekeeper не откроет файл, помогает `xattr -d com.apple.quarantine clipkeep clipkeepw`.
+After you pick a clip, clipkeep pastes it into the app you came from (Linux and Windows;
+on macOS the clip is just copied). In terminals press `Ctrl+Shift+V` yourself.
 
-### Из исходников (для разработчиков)
+```
+clipkeep [show] [TEXT]   open the window (optionally searching for TEXT)
+clipkeep status          clips, disk usage, active hotkey
+clipkeep list [N]        last N clips
+clipkeep search WORDS    clips containing all WORDS
+clipkeep clear           delete everything except pinned clips
+clipkeep stop            stop the background daemon
+clipkeep sync ...        see Sync
+```
 
-Нужен Rust (`rustup.rs`):
+## Sync
+
+Open the window, click **Sync**, sign in with Google and choose a sync password. On another
+device, sign in with the same Google account and enter the same password. Save the recovery code
+shown once: it is the only way back if you forget the password.
+
+- Everything is encrypted on your device before upload. Google only stores unreadable files in a
+  hidden app folder (scope `drive.appdata`) and never sees your password.
+- Your password protects a random master key (Argon2id). Changing the password does not
+  re-encrypt your history.
+- Without Google, any shared folder works (Syncthing, Dropbox, a network drive):
+  `clipkeep sync setup folder ~/Sync`.
+
+```
+clipkeep sync setup google | folder PATH   turn sync on
+clipkeep sync status | now | off           check, sync now, turn off on this device
+clipkeep sync password                     change the password
+```
+
+## Privacy and storage
+
+- History, index and images are encrypted at rest (ChaCha20-Poly1305) with a random per-device
+  key kept outside the data folder. There is no shared key in the code.
+- Lose the key file and the local history cannot be opened, so back it up:
+  Linux `~/.config/clipkeep/key.bin`, Windows `%LOCALAPPDATA%\clipkeep\key.bin`,
+  macOS `~/Library/Application Support/clipkeep-key/key.bin`.
+- Text is stored in compressed 64 KB blocks; duplicates are not stored twice.
+  Search over 100,000 clips takes about 1 ms.
+
+## Settings
+
+`config.txt` in the data folder (Linux `~/.local/share/clipkeep`, Windows `%APPDATA%\clipkeep`,
+macOS `~/Library/Application Support/clipkeep`):
+
+```text
+hotkey = Ctrl+Alt+V     # Windows/macOS
+max_entries = 0         # 0 = unlimited
+auto_paste = true       # paste the chosen clip automatically
+image_limit_mb = 1024   # disk space for images; 0 = unlimited
+```
+
+Restart after editing: `clipkeep stop`, then `clipkeep show`.
+
+## Build from source
 
 ```bash
-cargo install --git https://github.com/OWNER/clipkeep   # или из папки: cargo install --path .
+cargo install --git https://github.com/mrevds/clipkeep
 clipkeep setup
 ```
 
-Релиз: поставьте тег (`git tag v0.1.0 && git push --tags`), GitHub Actions (`release.yml`) соберёт
-архивы для всех ОС и выложит их в Releases вместе с `install.sh` и `install.ps1`.
+Google sign-in is built into release binaries only. For your own build, create an OAuth client
+(Google Cloud: enable Drive API, consent screen with scope `drive.appdata`, client type
+Desktop app) and either put `google_client_id` and `google_client_secret` into `config.txt`
+or set `CLIPKEEP_GOOGLE_CLIENT_ID` and `CLIPKEEP_GOOGLE_CLIENT_SECRET` at build time.
+Folder sync works without it. `--no-default-features` builds without Google support at all.
 
-Что делает `setup` на каждой ОС:
+Releases: push a tag (`git tag v0.1.0 && git push --tags`). GitHub Actions builds all platforms
+and publishes the archives with the install scripts. The OAuth client comes from the repository
+secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
-| ОС | Автозапуск | Горячая клавиша |
-|---|---|---|
-| Linux (GNOME) | `~/.config/autostart/clipkeep.desktop` | шорткат GNOME `Super+V → clipkeep show`; у списка уведомлений остаётся `Super+M` |
-| Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `clipkeepw.exe daemon` | демон сам регистрирует **`Win+Alt+V`**, если занято — `Ctrl+Alt+V` |
-| macOS | LaunchAgent `~/Library/LaunchAgents/com.clipkeep.daemon.plist` | демон сам регистрирует **`Ctrl+Cmd+V`**, если занято — `Ctrl+Option+V` |
+Status: Linux (GNOME, Wayland) is tested on real hardware; Windows and macOS are compile-checked only.
 
-`Win+V` на Windows занят встроенным буфером обмена, а `Cmd+Shift+V` на macOS во многих программах
-означает «вставить без форматирования», поэтому по умолчанию выбраны другие сочетания.
-Свою клавишу можно задать в `config.txt` (см. ниже). Какая клавиша сейчас работает, видно в `clipkeep status`.
+## License
 
-`clipkeep uninstall` отменяет всё, что сделал `setup`, и останавливает демон. История остаётся на диске.
-
-`clipkeepw` — та же программа, но на Windows собрана как GUI-приложение, чтобы демон и окно не
-открывали чёрное окно консоли. На Linux и macOS это просто копия `clipkeep`.
-
-> Windows и macOS пока проверены только сборкой (`cargo clippy --target …`), без запуска на живой
-> системе. Linux (GNOME, Wayland) проверен вживую.
-
-## Команды
-
-```
-clipkeep [show] [ТЕКСТ]  окно истории (ТЕКСТ — сразу искать его)
-clipkeep setup           автозапуск + горячая клавиша
-clipkeep uninstall       отменить setup
-clipkeep status          сколько клипов, сколько места на диске, какая горячая клавиша
-clipkeep list [N]        последние N клипов
-clipkeep search СЛОВА    клипы, где есть все СЛОВА
-clipkeep clear           удалить всё, кроме закреплённых
-clipkeep toggle          попросить демон открыть/закрыть окно
-clipkeep daemon          демон в текущем терминале (видно ошибки)
-clipkeep stop            остановить демон
-clipkeep bench [N]       замер хранилища на N синтетических клипах
-```
-
-## Окно
-
-- ввод текста — поиск (все слова, без учёта регистра, кириллица тоже)
-- `↑`/`↓`, `PgUp`/`PgDn` — выбор, `Enter` — скопировать, `Ctrl+1…9` — скопировать сразу
-- `Tab` / `Shift+Tab` — вкладки: **All**, **📌 Pinned**, **🔗 Links**, **🖼 Images** и ваши группы
-- `Ctrl+P` или правый клик — закрепить, `Shift+Del` — удалить
-- `Ctrl+G` — положить клип в группу: введите имя (новое или существующее) или кликните по нему;
-  пустое имя убирает клип из группы. Пустые группы исчезают сами. Регистр не важен: «работа» = «Работа».
-- `Esc`, повторное нажатие горячей клавиши или клик мимо окна — закрыть
-
-После выбора (`Enter`, клик, `Ctrl+1…9`) окно закрывается, а клип **сам вставляется** в программу,
-из которой вы его открыли: демон нажимает `Ctrl+V`.
-- Linux: через виртуальную клавиатуру `/dev/uinput` (работает и на Wayland, root не нужен,
-  если у пользователя есть доступ к устройству; на Ubuntu он есть по умолчанию).
-- Windows: через `SendInput`.
-- macOS: пока нет (нужно разрешение «Универсальный доступ»), клип просто остаётся в буфере.
-- В терминалах вставка — `Ctrl+Shift+V`, поэтому там нажмите её сами.
-- Выключить: `auto_paste = false` в `config.txt`.
-
-## Настройки: `config.txt`
-
-Лежит в папке с данными:
-
-| ОС | Папка |
-|---|---|
-| Linux | `~/.local/share/clipkeep` |
-| Windows | `%APPDATA%\clipkeep` |
-| macOS | `~/Library/Application Support/clipkeep` |
-
-```text
-hotkey = Ctrl+Alt+V    # Windows/macOS. Модификаторы: Ctrl, Alt/Option, Shift, Win/Cmd; клавиша A–Z или 0–9
-max_entries = 0        # 0 = без ограничения (по умолчанию)
-auto_paste = true      # сразу вставлять выбранный клип (Ctrl+V)
-image_limit_mb = 1024  # картинки занимают не больше (старые незакреплённые удаляются первыми); 0 = без лимита
-```
-
-После изменения: `clipkeep stop`, затем `clipkeep show` (демон перезапустится сам).
-
-## Картинки и скриншоты
-
-Скопированная картинка (скриншот, «Копировать изображение» в браузере) попадает в историю
-как клип: окно показывает миниатюру, поиск находит её по словам `image`, `screenshot`, `скриншот`,
-`картинка`, её можно закрепить и положить в группу. `Enter` кладёт в буфер исходные пиксели.
-
-- В текстовом хранилище лежит короткая метка, а сама картинка — в `images/<хеш>.img`:
-  маленькая миниатюра (PNG) и полный PNG. Одинаковые картинки не дублируются.
-- Больше 64 МБ в несжатом виде (примерно 4K×4K) не сохраняется.
-- Общий размер ограничен `image_limit_mb` (по умолчанию 1 ГБ), лишнее удаляется с самых старых,
-  закреплённые остаются.
-
-## Шифрование
-
-Всё на диске зашифровано: блоки истории, `index.bin` и картинки (ChaCha20-Poly1305, у каждого блока
-свой случайный nonce, привязка к месту в файле — подменить блок нельзя).
-
-- **Ключ у каждого свой.** При первом запуске демон создаёт случайные 256 бит. В исходниках и в git
-  ключа нет, и общего ключа на всех быть не может: тогда любой, кто скачал код, расшифровал бы чужую историю.
-- Ключ лежит **отдельно от данных**: Linux `~/.config/clipkeep/key.bin` (права 0600), Windows
-  `%LOCALAPPDATA%\clipkeep\key.bin`, macOS `~/Library/Application Support/clipkeep-key/key.bin`.
-  Копия или облачный бэкап папки с историей без ключа бесполезны.
-- **Потеряли ключ — история не откроется.** Поэтому демон не создаёт новый ключ поверх зашифрованной
-  истории, а останавливается с понятной ошибкой. Сохраните `key.bin` в менеджере паролей.
-- Старая незашифрованная история конвертируется сама при первом запуске новой версии.
-- Это защита «диска», а не от программы, запущенной под вашим пользователем: такая программа
-  может прочитать и ключ, и сам буфер обмена.
-
-## Синхронизация между устройствами
-
-Схема: **Google нужен только как вход и «полка»**, а шифрование держится на вашем пароле.
-Google, как и любой другой, видит только шифртекст.
-
-**Без терминала:** откройте окно (Super+V) → кнопка **Sync** справа от поиска → «Sign in with
-Google» → в браузере выберите аккаунт → придумайте пароль (на втором устройстве введите тот же) →
-сохраните резервный код. Тут же статус, «Sync now» и «Turn off». То же командами:
-
-```bash
-clipkeep sync setup google          # первое устройство: войти в Google, придумать пароль
-clipkeep sync setup google          # другое устройство: войти тем же Google, ввести пароль
-clipkeep sync setup folder ~/Sync   # то же без Google: любая папка (Syncthing, Dropbox, флешка)
-clipkeep sync status | now | off
-clipkeep sync password              # сменить пароль (данные не перешифровываются)
-```
-
-Как это защищено:
-- При первой настройке создаётся случайный **главный ключ**. Им шифруется всё, что уходит с устройства.
-- Сам главный ключ лежит в облаке в «хранилище» (`vault.ckv`) в двух копиях: зашифрованный ключом
-  из вашего **пароля** (Argon2id, 64 МБ, 3 прохода: каждая попытка подбора дорогая)
-  и ключом из **резервного кода**, который показывается один раз. Пароль минимум 10 символов,
-  лучше фраза из 3-4 слов.
-- Забыли пароль и потеряли код — облачную историю не открыть никому. Локальная остаётся.
-- Устройства обмениваются неизменяемыми зашифрованными пакетами изменений (`dev-<id>-<n>.ops`) и
-  картинками (`img-<хеш>.blob`). Конфликты решаются «последний выиграл» по каждому клипу;
-  удаление оставляет метку времени, поэтому старая копия клипа не воскресит удалённый.
-- `clear` и лимиты (`max_entries`, `image_limit_mb`) действуют только на этом устройстве и не синхронизируются.
-- Картинки больше 30 МБ остаются на своём устройстве.
-- Ключи и токен лежат в `~/.config/clipkeep/sync.json` (права 0600; Windows `%LOCALAPPDATA%\clipkeep`).
-  В git их нет и быть не может.
-
-### Вход через Google
-
-В готовые сборки из Releases OAuth-клиент встраивается при сборке: `release.yml` берёт его из
-секретов репозитория (Settings → Secrets and variables → Actions: `GOOGLE_CLIENT_ID`,
-`GOOGLE_CLIENT_SECRET`). В исходниках его нет. Для установленных приложений client id и secret
-публичны по замыслу (RFC 8252): данные защищены входом пользователя и паролем синхронизации.
-Перед входом Google может показать экран «Google hasn't verified this app» (Advanced → Go to clipkeep).
-
-Сборка из исходников входит через Google, только если указать свой клиент. Создайте в Google Cloud
-проект с включённым Drive API, экран согласия со scope `drive.appdata` и OAuth-клиент типа
-Desktop app. Затем либо впишите `google_client_id` и `google_client_secret` в `config.txt`, либо
-задайте при сборке переменные `CLIPKEEP_GOOGLE_CLIENT_ID` и `CLIPKEEP_GOOGLE_CLIENT_SECRET`.
-Синхронизация через папку работает без этого.
-
-Сборка без Google (меньше зависимостей): `cargo install --path . --no-default-features`.
-Тесты движка идут на двух «устройствах» с разными ключами; вход через Google покрыт модульными
-тестами (PKCE по вектору RFC 7636, разбор редиректа, тело загрузки).
-
-## Хранение: «сколько угодно» и мало места
-
-- Текст клипов складывается в блоки по ~64 КБ. Заполненный блок сжимается (deflate, уровень 9),
-  шифруется и дописывается в `blocks-N.dat`. Сжимать блоками выгоднее, чем каждый клип отдельно:
-  короткие клипы поодиночке почти не сжимаются.
-- В `index.bin` (тоже сжатом) хранятся только метаданные: ~32 байта на клип, группы, закрепления
-  и последний незаполненный блок. Индекс пишется атомарно (временный файл + rename), так что
-  при сбое теряется максимум последние полсекунды.
-- Удалённые клипы сначала только помечаются. Когда мусора больше половины, файл блоков
-  переписывается (компакция).
-- Дубликаты не хранятся: повторное копирование поднимает старый клип наверх.
-- Клипы больше 1 МБ не сохраняются.
-
-## Почему поиск всегда быстрый
-
-- Окно не загружает историю: каждый запрос уходит демону в фоновом потоке, поэтому окно
-  открывается мгновенно при любом размере истории, а ввод не подтормаживает.
-- У каждого блока есть фильтр на 1 КБ (битовая карта символов и пар соседних символов).
-  Если в фильтре нет хоть одной пары из запроса, блок пропускается целиком, без распаковки.
-- Поиск идёт от новых клипов к старым и останавливается на 200 результатах.
-- Последние 64 распакованных блока (~4 МБ) держатся в памяти.
-
-Замер `clipkeep bench` (синтетический текст из случайных слогов, Linux, release):
-
-| Клипов | Текст | На диске | Открытие | Поиск: частое слово / редкое старое / нет совпадений |
-|---|---|---|---|---|
-| 10 000 | 1.5 МБ | 0.65 МБ | 2 мс | 0.7 / 0.5 / 0.06 мс |
-| 100 000 | 14.8 МБ | 6.3 МБ | 11–17 мс | 0.8 / 0.8 / 0.4 мс |
-| 300 000 | 44.4 МБ | 18.9 МБ | 36–136 мс | 1.3–2.4 / 2.2–4.2 / 1.7–3.2 мс |
-
-Случайные слоги сжимаются хуже реального текста (2.4×). На настоящих данных deflate блоками по 64 КБ
-даёт примерно 3–5.5×: Rust-код 4.7×, английский текст 3.3×. Добавить клип: ~25–65 мкс.
-Запись индекса после изменения: ~20 мс при 100k клипов, ~50–115 мс при 300k (в фоне).
-
-## Как устроено
-
-```
-src/
-├── main.rs, bin/clipkeepw.rs   точки входа
-├── lib.rs                      список модулей
-├── config.rs, paths.rs         config.txt и пути на каждой ОС
-├── store/                      история на диске: ничего не знает про ОС и сеть
-│   ├── mod.rs                  сжатые зашифрованные блоки, фильтры, индекс, поиск, группы, компакция
-│   ├── text.rs                 разбор текста, хеши, метки картинок
-│   └── media.rs                картинки: PNG + миниатюра, в images/
-├── crypto/
-│   ├── mod.rs                  ChaCha20-Poly1305, ключ этого устройства
-│   └── vault.rs                хранилище ключа синхронизации: пароль (Argon2id) + резервный код
-├── daemon/                     фоновый процесс
-│   ├── mod.rs                  следит за буфером, владеет историей, отвечает окну и CLI
-│   ├── platform.rs             события ОС: XFixes / Windows-окно / NSPasteboard + горячая клавиша
-│   ├── paste.rs                автовставка: uinput / SendInput
-│   ├── ipc.rs                  строчный протокол (Unix-сокет, на Windows TCP 127.0.0.1)
-│   └── sync_loop.rs            поток синхронизации
-├── sync/
-│   ├── mod.rs                  движок: операции, слияние, push / fetch / apply
-│   ├── backend.rs              «куда класть»: папка (и тестовая память)
-│   ├── google.rs               вход через Google (PKCE) и Google Drive appDataFolder
-│   └── settings.rs             настройки синхронизации этого устройства
-├── ui/                         окно на egui/eframe: mod.rs, workers.rs (потоки), toggle.rs (Linux)
-└── cli/                        команды: mod.rs, setup.rs (автозапуск и горячая клавиша), sync_cmd.rs
-```
-
-Отладка окна: `CLIPKEEP_SCREENSHOT=/путь/out.ppm clipkeep show [текст]` сохраняет кадр и выходит
-(`CLIPKEEP_TAB=3` открывает 4-ю вкладку). `CLIPKEEP_DIR=/папка` — отдельная папка данных для тестов.
-
-## Дальше
-
-- [ ] Проверить Windows и macOS на живых машинах
-- [x] Сборка и релизы на GitHub Actions (`ci.yml`, `release.yml`, не запускались)
-- [x] Установка одной командой (`install.sh`, `install.ps1`)
-- [ ] `.deb`, `winget`, `brew`, цифровая подпись, иконка в `.exe`/`.app`
-- [x] Автовставка после выбора (Linux `uinput`, Windows `SendInput`)
-- [ ] Автовставка на macOS (`CGEvent`), вставка в терминалы (`Ctrl+Shift+V`)
-- [x] Картинки в истории (миниатюры, лимит размера)
-- [x] Шифрование на диске (ключ у каждого свой)
-- [x] Синхронизация между устройствами (папка / Google Drive), шифрование паролем
-- [ ] Синхронизация по локальной сети (мгновенная, без аккаунтов)
-- [ ] Сжатие удалённой истории (старые пакеты сейчас копятся и скачиваются новым устройством все)
-- [ ] Игнор паролей (менеджеры паролей помечают такие записи) и список исключённых приложений
-- [ ] Журнал изменений вместо полной перезаписи `index.bin`, чтобы при огромной истории запись была дешевле
-# clipkeep
+MIT
